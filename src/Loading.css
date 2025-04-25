@@ -1,0 +1,8 @@
+.loading {
+    padding: 12px 16px;
+    margin: 10px 0;
+    border-radius: 4px;
+    background: #e3f2fd;  
+    color: #1565c0;
+    font-weight: bold;
+}

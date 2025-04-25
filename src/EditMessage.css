@@ -1,0 +1,55 @@
+.edit-textarea {
+    padding: 8px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: inherit;
+}
+  
+.edit-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 8px;
+}
+  
+.cancel-edit-btn {
+    padding: 5px 10px;
+    background-color: #f5f5f5;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    cursor: pointer;
+}
+  
+.save-edit-btn {
+    padding: 5px 10px;
+    background-color: #2962ff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+  
+.save-edit-btn:hover {
+    background-color: #1565c0;
+}
+  
+.cancel-edit-btn:hover {
+    background-color: #e0e0e0;
+}
+  
+.edited-indicator {
+    font-size: 0.8rem;
+    color: #757575;
+    margin-left: 5px;
+    font-style: italic;
+}
+
+.edit-error{
+    padding: 10px 15px;
+    margin: 10px 0;
+    border-radius: 4px;
+    background-color: #ffebee;
+    color: #c62828;
+    border-left: 4px solid #f44336;
+}

@@ -1,0 +1,23 @@
+.reaction-bar {
+  display: flex;
+  flex-wrap:wrap; 
+  gap: 6px;
+  margin-top: 4px;
+}
+  
+.reaction-bar button {
+  border: none;
+  background: #f5f5f5;
+  border-radius: 12px;
+  padding: 2px 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+  
+.reaction-bar button.mine {
+  background: #ffe0b2;  
+}
+  
+.message-own .reaction-bar{
+  justify-content:flex-end; 
+}
