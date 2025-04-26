@@ -4,7 +4,6 @@ import EmojiPicker from './EmojiPicker';
 import EditMessage from './EditMessage';
 
 export default function RootsView({ roots, username, onSelect, onToggle, hoveredId, setHoveredId, onForward, onEdit }) {
-
   const [editingId, setEditingId] = useState(null);
 
   if (!roots.length) {
@@ -53,11 +52,11 @@ export default function RootsView({ roots, username, onSelect, onToggle, hovered
       }
 
       <button 
-          className="badge" 
-          onClick={(e) => {
+        className="badge"
+        onClick={(e) => {
           e.stopPropagation();
-          onSelect(root.id); 
-          }}
+          onSelect(root.id);
+        }}
       >
         💬 {root.replyCount}
       </button>

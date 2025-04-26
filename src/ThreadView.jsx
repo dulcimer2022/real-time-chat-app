@@ -1,19 +1,24 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ReactionBar from './ReactionBar';
 import EmojiPicker from './EmojiPicker';
 import EditMessage from './EditMessage';
 
 export default function ThreadView({ messages, username, onBack, onToggle, hoveredId, setHoveredId, onForward, onEdit  }) {
   const [editingId, setEditingId] = useState(null);
+  const navigate = useNavigate();
 
   if (!messages.length) { return null; }
 
   return (
     <>
       <button className="back" onClick={(e) => {
+        e.preventDefault();
         e.stopPropagation(); 
-        onBack();
-      }}>← Back</button>
+        if (onBack) {
+          onBack(); 
+        }
+      }}>← Back to Channel</button>
 
       {messages.map(msg => (
         <div key={msg.id}

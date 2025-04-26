@@ -7,7 +7,8 @@ export default function MessageArea({
   currentTid, currentChannel,
   username, hoveredId, setHoveredId,
   onSelect, onToggle, onForward, onEdit,
-  messageText, setMessageText, onSend, onClearError
+  messageText, setMessageText, onSend, onClearError,
+  inputRef 
 }) {
   return (
     <div className="content-area">
@@ -31,7 +32,7 @@ export default function MessageArea({
             <ThreadView
               messages={messages}
               username={username}
-              onBack={() => onSelect(null)}
+              onBack={onSelect}
               onToggle={onToggle}
               hoveredId={hoveredId}
               setHoveredId={setHoveredId}
@@ -44,6 +45,7 @@ export default function MessageArea({
 
       <form className="message-form" onSubmit={onSend}>
         <input
+          ref={inputRef} 
           type="text"
           className="message-input"
           value={messageText}

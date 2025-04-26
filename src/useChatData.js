@@ -1,93 +1,109 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  fetchRoots,
-  fetchThread,
   fetchUsers,
   fetchChannels,
+  fetchRoots,
+  fetchThread,
   addReaction,
   removeReaction
 } from './services';
 
-export function useChatData(
-  initialChannel = 'public',
-  onError = () => {}          
-) {
-  const [roots,      setRoots]      = useState([]);
-  const [threadMsgs, setThreadMsgs] = useState([]);
-  const [users,      setUsers]      = useState([]);
-  const [channels,   setChannels]   = useState([]);
+export function useChatData(defaultChannel, onError) {
+  const [users, setUsers]             = useState([]);        
+  const [channels, setChannels]       = useState([]);        
+  const [roots, setRoots]             = useState([]);
+  const [threadMsgs, setThreadMsgs]   = useState([]);
+  const [currentChannel, setCurrentChannel] = useState(defaultChannel);
+  const [currentTid, setCurrentTid]   = useState(null);
+  const [hoveredId, setHoveredId]     = useState(null);
+ 
+  const addChannel = useCallback(newChannel => {
+    setChannels(ch => [...ch, newChannel]);
+  }, []);
 
-  const [currentChannel, setCurrentChannel] = useState(initialChannel);
-  const [currentTid,     setCurrentTid]     = useState(null);
-  const [hoveredId,      setHoveredId]      = useState(null);
-
-  const currentChannelRef = useRef(initialChannel); //useRef to avoid re-render
-  useEffect(() => {
-    currentChannelRef.current = currentChannel;
-  }, [currentChannel]);
-
-  const refreshRoots = () =>
-    fetchRoots(currentChannel)
-      .then(setRoots)
-      .catch(err => onError(err.error || 'networkError'));
-
-  const refreshThread = () => {
-    if (currentTid == null) return Promise.resolve();
-    return fetchThread(currentTid)
-      .then(({ root, replies }) => setThreadMsgs([root, ...replies]))
-      .catch(err => onError(err.error || 'networkError'));
-  };
-
-  const toggleReaction = (id, key, has) =>
-    (has ? removeReaction(id, key) : addReaction(id, key))
-      .then(() =>
-        currentTid === null ? refreshRoots() : refreshThread()
-      )
-      .catch(err => onError(err.error || 'networkError'));
-
-  useEffect(() => {
-    if (currentTid == null) {
-      refreshRoots();
-    } else {
-      refreshThread();
-    }
-    fetchUsers()
+  const refreshUsers = useCallback(() => {
+    return fetchUsers()
       .then(setUsers)
-      .catch(err => onError(err.error || 'networkError'));
-    fetchChannels()
+      .catch(err => {
+        onError(err.error || 'default');
+        throw err;
+      });
+  }, [onError]);
+
+  const refreshChannels = useCallback(() => {
+    return fetchChannels()
       .then(setChannels)
-      .catch(err => onError(err.error || 'networkError'));
+      .catch(err => {
+        onError(err.error || 'default');
+        throw err;
+      });
+  }, [onError]);
 
-    const id = setInterval(() => {
-      if (currentTid == null) {
-        refreshRoots();
-      } else {
-        refreshThread();
-      }
-      fetchUsers()
-        .then(setUsers)
-        .catch(err => onError(err.error || 'networkError'));
-      fetchChannels()
-        .then(setChannels)
-        .catch(err => onError(err.error || 'networkError'));
-    }, 5000);
+  // memoized loader for channel roots
+  const refreshRoots = useCallback(() => {
+    return fetchRoots(currentChannel)
+      .then(setRoots)
+      .catch(err => {
+        onError(err.error || 'default');
+        throw err;
+      });
+  }, [currentChannel, onError]);
 
-    return () => clearInterval(id);
-  }, [currentChannel, currentTid]);
+  const refreshThread = useCallback((tid) => {
+    return fetchThread(tid)
+      .then(({ root, replies }) => {
+        setThreadMsgs([root, ...replies]);
+      })
+      .catch(err => {
+        onError(err.error || 'default');
+        throw err;
+      });
+  }, [onError]);
+
+  const toggleReaction = useCallback((messageId, key) => {
+    return addReaction(messageId, key)
+      .catch(() => removeReaction(messageId, key))
+      .then(() =>
+        currentTid == null
+          ? refreshRoots()
+          : refreshThread(currentTid)
+      )
+      .catch(err => onError(err.error || 'default'));
+  }, [currentTid, refreshRoots, refreshThread, onError]);
+
+  useEffect(() => {
+    refreshUsers();
+    refreshChannels();
+  }, [refreshUsers, refreshChannels]);
+
+  useEffect(() => {
+    refreshRoots();
+  }, [currentChannel, refreshRoots]);
+
+  useEffect(() => {
+    if (currentTid != null) {
+      refreshThread(currentTid);
+    } else {
+      setThreadMsgs([]);
+    }
+  }, [currentTid, refreshThread]);
 
   return {
-    roots,
-    threadMsgs,
     users,
     channels,
+    roots,
+    threadMsgs,
     currentChannel,
-    setCurrentChannel,
     currentTid,
-    setCurrentTid,
     hoveredId,
+
+    setCurrentChannel,
+    setCurrentTid,
     setHoveredId,
+
     refreshRoots,
     refreshThread,
     toggleReaction,
+    addChannel,
   };
 }
