@@ -24,7 +24,7 @@ Visit http://localhost:3000 to see the running app
 ### Main chat interface
 ![Main Chat](screenshot/main.png)
 ### Thread View
-![Main Chat](screenshot/thread.png)
+![Main Chat](screenshot/thread.png) 
 ### Emoji Reactions
 ![Main Chat](screenshot/emoji.png)
 ### Editing Message
