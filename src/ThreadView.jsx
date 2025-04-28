@@ -26,9 +26,9 @@ export default function ThreadView({ messages, username, onBack, onToggle, hover
              onMouseEnter={() => setHoveredId(msg.id)}
              onMouseLeave={() => setHoveredId(null)}>
           <div className="message-username">
-            {root.username}
+            {msg.username}
             <span className="message-timestamp">
-              {new Date(root.timestamp).toLocaleTimeString()}
+              {new Date(msg.timestamp).toLocaleTimeString()}
             </span>
           </div>
 
