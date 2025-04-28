@@ -25,7 +25,12 @@ export default function ThreadView({ messages, username, onBack, onToggle, hover
              className={`message ${msg.username===username ? 'message-own' : ''}`}
              onMouseEnter={() => setHoveredId(msg.id)}
              onMouseLeave={() => setHoveredId(null)}>
-          <div className="message-username">{msg.username}</div>
+          <div className="message-username">
+            {root.username}
+            <span className="message-timestamp">
+              {new Date(root.timestamp).toLocaleTimeString()}
+            </span>
+          </div>
 
           {msg.isForwarded && (
             <div className="forwarded-content">

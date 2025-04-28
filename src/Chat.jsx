@@ -23,6 +23,7 @@ import {
   updateMessage,
   createChannel
 } from './services';
+import socketService from './socketService';
 
 // loader wrapper for threads
 function ThreadRoute({ children, setCurrentTid, refreshThread }) {
@@ -33,6 +34,9 @@ function ThreadRoute({ children, setCurrentTid, refreshThread }) {
     setIsLoading(true);
     const numericId = Number(threadId);
     setCurrentTid(numericId);
+
+    // Join the thread room when loading a thread
+    socketService.joinThread(numericId);
 
     // pass numericId into refreshThread
     refreshThread(numericId)
@@ -87,29 +91,22 @@ export default function Chat({ username, onLogout, setError }) {
       .then(() => {
         setMessageText('');
         setLocalError('');
-        return currentTid == null
-          ? refreshRoots()
-          : refreshThread(currentTid);
       })
       .catch(err => setLocalError(err.error || 'default'));
   };
 
   const handleEditMessage = (id, text) => {
     return updateMessage(id, text)
-      .then(() =>
-        currentTid == null
-          ? refreshRoots()
-          : refreshThread(currentTid)
-      );
+      .then(() => {
+        // WebSockets will handle the update, no need to refresh manually
+        return Promise.resolve();
+      });
   };
 
   const handleForwardSubmit = (id, comment) => {
     forwardMessage(id, comment, currentChannel, currentTid)
       .then(() => {
         setMessageToForward(null);
-        return currentTid == null
-          ? refreshRoots()
-          : refreshThread(currentTid);
       })
       .catch(err => setError(err.error || 'default'));
   };
@@ -117,7 +114,10 @@ export default function Chat({ username, onLogout, setError }) {
   const handleChannelCreate = (name, setModalError) => {
     return createChannel(name)
       .then((newChannel) => {
-        addChannel(newChannel);
+        // WebSockets will notify all clients about the new channel
+        // Join the new channel room
+        socketService.joinChannel(newChannel.id);
+        //addChannel(newChannel);
         setCurrentChannel(newChannel.id);
         setModalError('channel-creation-success');
         navigate(`/chat/channel/${newChannel.id}`);
@@ -132,10 +132,12 @@ export default function Chat({ username, onLogout, setError }) {
     setLocalError('');
     setCurrentTid(null);
     setCurrentChannel(channelId);
+    socketService.joinChannel(channelId);
     navigate(`/chat/channel/${channelId}`);
   };
 
   const handleThreadSelect = threadId => {
+    socketService.joinThread(threadId);   //join the thread room
     navigate(`/chat/thread/${threadId}`);
   };
 
@@ -146,7 +148,10 @@ export default function Chat({ username, onLogout, setError }) {
 
   const handleLogoutClick = () => {
     logout()
-      .then(() => onLogout())
+      .then(() =>{
+        socketService.disconnect();
+        onLogout();
+      })
       .catch(err => setError(err.error || 'networkError'));
   };
 
@@ -157,6 +162,7 @@ export default function Chat({ username, onLogout, setError }) {
       if (channelId && channelId !== currentChannel) {
         setCurrentChannel(channelId);
         setCurrentTid(null);
+        socketService.joinChannel(channelId);
       }
     }, [channelId]);
 

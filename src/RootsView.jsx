@@ -17,7 +17,12 @@ export default function RootsView({ roots, username, onSelect, onToggle, hovered
          onMouseEnter={() => setHoveredId(root.id)}
          onMouseLeave={() => setHoveredId(null)}>
 
-      <div className="message-username">{root.username}</div>
+      <div className="message-username">
+        {root.username}
+        <span className="message-timestamp">
+          {new Date(root.timestamp).toLocaleTimeString()}
+        </span>
+      </div>
       {root.isForwarded && (
         <div className="forwarded-content">
           <div className="forwarded-tag">Forwarded from {root.originalMessage.username}</div>

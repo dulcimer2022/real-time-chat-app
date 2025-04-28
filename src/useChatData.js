@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   fetchUsers,
   fetchChannels,
@@ -7,6 +7,7 @@ import {
   addReaction,
   removeReaction
 } from './services';
+import socketService from './socketService';
 
 export function useChatData(defaultChannel, onError) {
   const [users, setUsers]             = useState([]);        
@@ -16,7 +17,30 @@ export function useChatData(defaultChannel, onError) {
   const [currentChannel, setCurrentChannel] = useState(defaultChannel);
   const [currentTid, setCurrentTid]   = useState(null);
   const [hoveredId, setHoveredId]     = useState(null);
- 
+
+  // Refs to keep track of current values in callbacks
+  const currentChannelRef = useRef(defaultChannel);
+  const currentTidRef = useRef(null);
+  const rootsRef = useRef([]);
+  const threadMsgsRef = useRef([]);
+
+  // Update refs when state changes
+  useEffect(() => {
+    currentChannelRef.current = currentChannel;
+  }, [currentChannel]);
+  
+  useEffect(() => {
+    currentTidRef.current = currentTid;
+  }, [currentTid]);
+  
+  useEffect(() => {
+    rootsRef.current = roots;
+  }, [roots]);
+  
+  useEffect(() => {
+    threadMsgsRef.current = threadMsgs;
+  }, [threadMsgs]);
+
   const addChannel = useCallback(newChannel => {
     setChannels(ch => [...ch, newChannel]);
   }, []);
@@ -42,7 +66,10 @@ export function useChatData(defaultChannel, onError) {
   // memoized loader for channel roots
   const refreshRoots = useCallback(() => {
     return fetchRoots(currentChannel)
-      .then(setRoots)
+      .then(rootsArr => {
+        //reverse to oldest-first
+        setRoots([...rootsArr].reverse());
+      })
       .catch(err => {
         onError(err.error || 'default');
         throw err;
@@ -60,18 +87,20 @@ export function useChatData(defaultChannel, onError) {
       });
   }, [onError]);
 
-  const toggleReaction = useCallback((messageId, key) => {
-    return addReaction(messageId, key)
-      .catch(() => removeReaction(messageId, key))
+  const toggleReaction = useCallback((messageId, key, hasReacted) => {
+    // if user already reacted, call remove; otherwise add
+    const action = hasReacted ? removeReaction : addReaction;
+    return action(messageId, key)
       .then(() =>
-        currentTid == null
+        currentTidRef.current == null
           ? refreshRoots()
-          : refreshThread(currentTid)
+          : refreshThread(currentTidRef.current)
       )
       .catch(err => onError(err.error || 'default'));
-  }, [currentTid, refreshRoots, refreshThread, onError]);
+  }, [refreshRoots, refreshThread, onError]);
 
-  useEffect(() => {
+  //initial data loading
+  useEffect(() => {     
     refreshUsers();
     refreshChannels();
   }, [refreshUsers, refreshChannels]);
@@ -80,13 +109,111 @@ export function useChatData(defaultChannel, onError) {
     refreshRoots();
   }, [currentChannel, refreshRoots]);
 
+  // Handle WebSocket events
   useEffect(() => {
-    if (currentTid != null) {
-      refreshThread(currentTid);
-    } else {
-      setThreadMsgs([]);
+    // Join the current channel room
+    socketService.joinChannel(currentChannel);
+    
+    // Setup socket event listeners
+    const unsubscribeUsersUpdated = socketService.on('users-updated', newUsers => {
+      setUsers(newUsers);
+    });
+    
+    const unsubscribeChannelCreated = socketService.on('channel-created', newChannel => {
+      setChannels(prevChannels => [...prevChannels, newChannel]);
+    });
+    
+    const unsubscribeMessageCreated = socketService.on('message-created', newMessage => {
+      // 1) If in a thread and this message belongs there, append it
+      if (
+        currentTidRef.current != null &&
+        newMessage.threadId === currentTidRef.current
+      ) {
+        setThreadMsgs(prev => [...prev, newMessage]);
+      }
+      // 2) if a new root in the current channel, append it there
+      else if (
+        newMessage.channelId === currentChannelRef.current &&
+        !newMessage.threadId
+      ) {
+        setRoots(prevRoots => [...prevRoots, newMessage]);
+      }
+    });
+    
+    const unsubscribeMessageUpdated = socketService.on('message-updated', updatedMessage => {
+      // Update in roots if in current channel
+      if (updatedMessage.channelId === currentChannelRef.current && !updatedMessage.threadId) {
+        setRoots(prevRoots => {
+          return prevRoots.map(msg => 
+            msg.id === updatedMessage.id ? updatedMessage : msg
+          );
+        });
+      }
+      
+      // Update in thread messages
+      if (updatedMessage.threadId === currentTidRef.current || updatedMessage.id === currentTidRef.current) {
+        setThreadMsgs(prevMsgs => {
+          return prevMsgs.map(msg => 
+            msg.id === updatedMessage.id ? updatedMessage : msg
+          );
+        });
+      }
+    });
+    
+    const unsubscribeReactionUpdated = socketService.on('reaction-updated', updatedMessage => {
+      // Update in roots if in current channel
+      if (updatedMessage.channelId === currentChannelRef.current && !updatedMessage.threadId) {
+        setRoots(prevRoots => {
+          return prevRoots.map(msg => 
+            msg.id === updatedMessage.id ? updatedMessage : msg
+          );
+        });
+      }
+      
+      // Update in thread messages
+      if (updatedMessage.threadId === currentTidRef.current || updatedMessage.id === currentTidRef.current) {
+        setThreadMsgs(prevMsgs => {
+          return prevMsgs.map(msg => 
+            msg.id === updatedMessage.id ? updatedMessage : msg
+          );
+        });
+      }
+    });
+    
+    const unsubscribeReplyCreated = socketService.on('reply-created', newReply => {
+      if (newReply.threadId === currentTidRef.current) {
+        setThreadMsgs(prevMsgs => [...prevMsgs, newReply]);
+      }
+    });
+    
+    const unsubscribeThreadUpdated = socketService.on('thread-updated', updatedRoot => {
+      if (updatedRoot.channelId === currentChannelRef.current) {
+        setRoots(prevRoots => {
+          return prevRoots.map(msg => 
+            msg.id === updatedRoot.id ? updatedRoot : msg
+          );
+        });
+      }
+    });
+    
+    return () => {
+      unsubscribeUsersUpdated();
+      unsubscribeChannelCreated();
+      unsubscribeMessageCreated();
+      unsubscribeMessageUpdated();
+      unsubscribeReactionUpdated();
+      unsubscribeReplyCreated();
+      unsubscribeThreadUpdated();
+    };
+  }, [currentChannel]);
+
+  // Join thread room when current thread changes
+  useEffect(() => {
+    if (currentTid) {
+      socketService.joinThread(currentTid);
     }
-  }, [currentTid, refreshThread]);
+  }, [currentTid]);
+
 
   return {
     users,

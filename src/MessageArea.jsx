@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import RootsView from './RootsView';
 import ThreadView from './ThreadView';
 import './MessageArea.css';
@@ -10,13 +11,22 @@ export default function MessageArea({
   messageText, setMessageText, onSend, onClearError,
   inputRef 
 }) {
+
+  const listRef = useRef(null);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight; } //scroll to bottom
+  }, [rootList, messages]);
+
   return (
     <div className="content-area">
       <div className="messages-panel">
         <h3>
           {currentTid === null ? `#${currentChannel}` : 'Thread'}
         </h3>
-        <div className="messages-list">
+        <div ref={listRef} className="messages-list">
           {currentTid === null ? (
             <RootsView
               roots={rootList}
@@ -53,6 +63,10 @@ export default function MessageArea({
             setMessageText(e.target.value);
             onClearError(); 
           }}
+          onFocus={() => {
+            const el = listRef.current;
+            if (el) el.scrollTop = el.scrollHeight;
+           }}
           placeholder={`Message ${
             currentTid === null ? `#${currentChannel}` : 'thread'
           }...`}

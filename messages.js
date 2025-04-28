@@ -1,115 +1,134 @@
+//const messages = [];
 
-const messages = [];
+// Simulated database of messages
+const messagesDb = [];
+let nextId = 1;
 
 function addReaction(id, username, key){            
-  const msg = messages.find(m => m.id === +id);
-  if(!msg){ return null; }
-  msg.reactions ||= {};
-  msg.reactions[key] ||= [];
-  if(!msg.reactions[key].includes(username)){
-    msg.reactions[key].push(username);
+  const numericId = Number(id);
+  const message = messagesDb.find(msg => msg.id === numericId);
+
+  if(!message){ return null; }
+  // Initialize the reaction array if needed
+  if (!message.reactions[key]) {
+    message.reactions[key] = [];
   }
-  return msg;
+
+  // Add username to the reaction if not already there
+  if (!message.reactions[key].includes(username)) {
+    message.reactions[key].push(username);
+  }
+  
+  return message;
 }
 
 function removeReaction(id, username, key){         
-  const msg = messages.find(m => m.id === +id);
-  if(!msg || !msg.reactions?.[key]){ return null; }
-  msg.reactions[key] = msg.reactions[key].filter(u=>u!==username);
-  if(!msg.reactions[key].length){ delete msg.reactions[key]; }
-  return msg;
+  const numericId = Number(id);
+  const message = messagesDb.find(msg => msg.id === numericId);
+
+  if (!message) return null;
+
+  // If the reaction exists, remove the username
+  if (message.reactions[key]) {
+    message.reactions[key] = message.reactions[key].filter(u => u !== username);
+    
+    // Remove the reaction key entirely if no users are left
+    if (message.reactions[key].length === 0) {
+      delete message.reactions[key];
+    }
+  }
+  
+  return message;
 }
 
 function addMessage(username, text, options = {}) {
-    const id = messages.length + 1;
-    const { threadId = null, parentId = null, channelId = 'public' } = options;
+  const { threadId = null, parentId = null, channelId = 'public', originalMessage = null } = options;
   
-    const message = {
-      id,
-      username,
-      text,
-      reactions: {},
-      parentId,
-      threadId: threadId !== null ? +threadId : null, // Ensure threadId is a number
-      channelId,
-    };
+  const isForwarded = !!originalMessage;
+
+  const message = {
+    id: nextId++,
+    username,
+    text,
+    timestamp: Date.now(),
+    reactions: {},
+    parentId,
+    threadId: threadId !== null ? Number(threadId) : null,
+    channelId,
+    isForwarded,
+    originalMessage,
+    edited: false,
+  };
   
-    if (message.threadId === null) {
-      message.threadId = id;
-    }
-    
-    messages.push(message);
-    return message;
-  }
+  messagesDb.push(message);
+  return message;
+}
 
-
-function getMessages() {
-  return [...messages]; 
+// New method to get a specific message
+function getMessage(id) {
+  const messageId = Number(id);
+  return messagesDb.find(msg => msg.id === messageId);
 }
 
 function listRoots(channelId = 'public') {
-  return messages.filter(m => 
-    m.parentId === null && 
-    m.threadId === m.id &&
-    m.channelId === channelId
-  );
+  return messagesDb
+    .filter(msg => !msg.threadId && msg.channelId === channelId)
+    .sort((a, b) => b.timestamp - a.timestamp);
 }
 
 function listThread(tid) {
-    const threadId = typeof tid === 'number' ? tid : +tid;
+    // Convert to number to ensure type safety
+    const numericThreadId = Number(tid);
+    //const threadId = typeof tid === 'number' ? tid : +tid;
     
-    if (isNaN(threadId)) {
-      return [];
-    }
-    
-    return messages
-      .filter(m => m.threadId === +tid) 
-      .sort((a, b) => a.id - b.id);
-}
-
-function getMessagesByChannel(channelId) {
-  return messages.filter(m => m.channelId === channelId);
+  // Find the root message first (message with id === threadId)
+  const root = messagesDb.find(msg => msg.id === numericThreadId);
+  if (!root) return [];
+  
+  // Then find all messages in the thread (with threadId === threadId)
+  const replies = messagesDb
+    .filter(msg => msg.threadId === numericThreadId && msg.id !== numericThreadId)
+    .sort((a, b) => a.timestamp - b.timestamp);
+  
+  return [root, ...replies];
 }
 
 //forward feature
 function forwardMessage(username, originalMessageId, comment = '', options = {}) {
-  const originalMessage = messages.find(m => m.id === +originalMessageId);
+  const { channelId = 'public', threadId = null } = options;
+  //const originalMessage = messages.find(m => m.id === +originalMessageId);
+  const numericId = Number(originalMessageId);
+  const originalMessage = messagesDb.find(msg => msg.id === numericId);
+
   if (!originalMessage) {
     return null;
   }
   
-  const channelId = options.channelId || originalMessage.channelId || 'public';
+  //const channelId = options.channelId || originalMessage.channelId || 'public';
   
-  const id = messages.length + 1;
-  const newMessage = {
-    id,
+  // Create a new message with a reference to the original
+  const forwardedMessage = addMessage(
     username,
-    text: comment || '',
-    reactions: {},
-    channelId,
-    isForwarded: true,
-    originalMessage: {
-      id: originalMessage.id,
-      username: originalMessage.username,
-      text: originalMessage.text
+    comment,
+    {
+      threadId,
+      channelId,
+      originalMessage: {
+        id: originalMessage.id,
+        username: originalMessage.username,
+        text: originalMessage.text
+      }
     }
-  };
+  );
   
-  if (options.threadId) {
-    newMessage.threadId = options.threadId;
-    newMessage.parentId = options.threadId;
-  } else {
-    newMessage.threadId = id;
-    newMessage.parentId = null;
-  }
-  
-  messages.push(newMessage);
-  return newMessage;
+  return forwardedMessage;
 }
 
 //editing feature
 function updateMessage(id, username, text) {
-  const message = messages.find(m=>m.id === + id);
+  const numericId = Number(id);
+  const message = messagesDb.find(msg => msg.id === numericId);
+
   if(!message){
     return null;
   }
@@ -126,12 +145,11 @@ function updateMessage(id, username, text) {
 
 export default {
   addMessage,
-  getMessages,
+  getMessage,
   addReaction,
   removeReaction,
   listRoots,
   listThread,
-  getMessagesByChannel,
   forwardMessage,
   updateMessage,
 };
