@@ -32,14 +32,12 @@ function ThreadRoute({ children, setCurrentTid, refreshThread }) {
 
   useEffect(() => {
     setIsLoading(true);
-    const numericId = Number(threadId);
-    setCurrentTid(numericId);
+    setCurrentTid(threadId);
 
     // Join the thread room when loading a thread
-    socketService.joinThread(numericId);
+    socketService.joinThread(threadId);
 
-    // pass numericId into refreshThread
-    refreshThread(numericId)
+    refreshThread(threadId)
       .then(() => setIsLoading(false))
       .catch(err => {
         console.error('Error fetching thread:', err);
@@ -98,7 +96,7 @@ export default function Chat({ username, onLogout, setError }) {
   const handleEditMessage = (id, text) => {
     return updateMessage(id, text)
       .then(() => {
-        // WebSockets will handle the update, no need to refresh manually
+        // WebSockets will handle the update
         return Promise.resolve();
       });
   };
@@ -117,7 +115,6 @@ export default function Chat({ username, onLogout, setError }) {
         // WebSockets will notify all clients about the new channel
         // Join the new channel room
         socketService.joinChannel(newChannel.id);
-        //addChannel(newChannel);
         setCurrentChannel(newChannel.id);
         setModalError('channel-creation-success');
         navigate(`/chat/channel/${newChannel.id}`);
@@ -155,7 +152,6 @@ export default function Chat({ username, onLogout, setError }) {
       .catch(err => setError(err.error || 'networkError'));
   };
 
-  // Channel view
   const ChannelView = () => {
     const { channelId } = useParams();
     useEffect(() => {
@@ -188,7 +184,6 @@ export default function Chat({ username, onLogout, setError }) {
     );
   };
 
-  // Thread view
   const ThreadView = () => (
     <MessageArea
       rootList={[]}

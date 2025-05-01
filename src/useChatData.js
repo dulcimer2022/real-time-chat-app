@@ -68,7 +68,12 @@ export function useChatData(defaultChannel, onError) {
     return fetchRoots(currentChannel)
       .then(rootsArr => {
         //reverse to oldest-first
-        setRoots([...rootsArr].reverse());
+        // normalize each msg.reactions into a Map
+        const normalized = rootsArr.map(m => ({
+          ...m,
+          reactions: new Map(Object.entries(m.reactions || {}))
+        }));
+        setRoots(normalized.reverse());
       })
       .catch(err => {
         onError(err.error || 'default');
@@ -79,7 +84,15 @@ export function useChatData(defaultChannel, onError) {
   const refreshThread = useCallback((tid) => {
     return fetchThread(tid)
       .then(({ root, replies }) => {
-        setThreadMsgs([root, ...replies]);
+        const normRoot = {
+            ...root,
+            reactions: new Map(Object.entries(root.reactions || {}))
+          };
+          const normReplies = replies.map(r => ({
+            ...r,
+            reactions: new Map(Object.entries(r.reactions || {}))
+          }));
+          setThreadMsgs([normRoot, ...normReplies]);
       })
       .catch(err => {
         onError(err.error || 'default');
@@ -89,15 +102,11 @@ export function useChatData(defaultChannel, onError) {
 
   const toggleReaction = useCallback((messageId, key, hasReacted) => {
     // if user already reacted, call remove; otherwise add
+    const id = messageId?.toString();
     const action = hasReacted ? removeReaction : addReaction;
-    return action(messageId, key)
-      .then(() =>
-        currentTidRef.current == null
-          ? refreshRoots()
-          : refreshThread(currentTidRef.current)
-      )
+    return action(id, key)
       .catch(err => onError(err.error || 'default'));
-  }, [refreshRoots, refreshThread, onError]);
+  }, [onError]); 
 
   //initial data loading
   useEffect(() => {     
@@ -124,28 +133,36 @@ export function useChatData(defaultChannel, onError) {
     });
     
     const unsubscribeMessageCreated = socketService.on('message-created', newMessage => {
-      // 1) If in a thread and this message belongs there, append it
-      if (
-        currentTidRef.current != null &&
-        newMessage.threadId === currentTidRef.current
-      ) {
-        setThreadMsgs(prev => [...prev, newMessage]);
-      }
-      // 2) if a new root in the current channel, append it there
-      else if (
-        newMessage.channelId === currentChannelRef.current &&
-        !newMessage.threadId
-      ) {
-        setRoots(prevRoots => [...prevRoots, newMessage]);
-      }
-    });
+    // normalize incoming reactions into a Map 
+        const normalized = {
+          ...newMessage,
+          reactions: new Map(Object.entries(newMessage.reactions || {}))
+        };
+        if (
+          currentTidRef.current != null &&
+          normalized.threadId === currentTidRef.current
+        ) {
+          setThreadMsgs(prev => [...prev, normalized]);
+        } else if (
+          normalized.channelId === currentChannelRef.current &&
+          !normalized.threadId
+        ) {
+          setRoots(prev => [...prev, normalized]);
+        }
+      });
     
     const unsubscribeMessageUpdated = socketService.on('message-updated', updatedMessage => {
+      const uid = updatedMessage.id || updatedMessage._id?.toString();
+      updatedMessage.id = uid;
+
+      if (updatedMessage._id && !updatedMessage.id) {
+        updatedMessage.id = updatedMessage._id;
+      }
       // Update in roots if in current channel
       if (updatedMessage.channelId === currentChannelRef.current && !updatedMessage.threadId) {
         setRoots(prevRoots => {
           return prevRoots.map(msg => 
-            msg.id === updatedMessage.id ? updatedMessage : msg
+            msg.id === uid ? updatedMessage : msg
           );
         });
       }
@@ -154,43 +171,58 @@ export function useChatData(defaultChannel, onError) {
       if (updatedMessage.threadId === currentTidRef.current || updatedMessage.id === currentTidRef.current) {
         setThreadMsgs(prevMsgs => {
           return prevMsgs.map(msg => 
-            msg.id === updatedMessage.id ? updatedMessage : msg
+            msg.id === uid ? updatedMessage : msg
           );
         });
       }
     });
     
-    const unsubscribeReactionUpdated = socketService.on('reaction-updated', updatedMessage => {
-      // Update in roots if in current channel
-      if (updatedMessage.channelId === currentChannelRef.current && !updatedMessage.threadId) {
-        setRoots(prevRoots => {
-          return prevRoots.map(msg => 
-            msg.id === updatedMessage.id ? updatedMessage : msg
+    const unsubscribeReactionUpdated = socketService.on( 'reaction-updated', updatedMessage => {
+        // normalize to string ID
+        const uid = updatedMessage.id || updatedMessage._id?.toString();
+        updatedMessage.id = uid;
+        updatedMessage.reactions = new Map(
+          Object.entries(updatedMessage.reactions || {}));
+
+        // update roots if in this channel
+        if (
+          updatedMessage.channelId === currentChannelRef.current &&
+          !updatedMessage.threadId
+        ) {
+          setRoots(prev =>
+            prev.map(m => (m.id === uid ? updatedMessage : m)));
+        }
+
+        // update thread if it belongs here or thread root
+        if (
+          updatedMessage.threadId === currentTidRef.current ||
+          uid === currentTidRef.current
+        ) {
+          setThreadMsgs(prev =>
+            prev.map(m => (m.id === uid ? updatedMessage : m))
           );
-        });
-      }
-      
-      // Update in thread messages
-      if (updatedMessage.threadId === currentTidRef.current || updatedMessage.id === currentTidRef.current) {
-        setThreadMsgs(prevMsgs => {
-          return prevMsgs.map(msg => 
-            msg.id === updatedMessage.id ? updatedMessage : msg
-          );
-        });
-      }
-    });
+        }}
+    );
     
-    const unsubscribeReplyCreated = socketService.on('reply-created', newReply => {
-      if (newReply.threadId === currentTidRef.current) {
-        setThreadMsgs(prevMsgs => [...prevMsgs, newReply]);
+  const unsubscribeReplyCreated = socketService.on('reply-created', newReply => {
+      // ─ normalize incoming reactions into a Map ─
+      const normalizedReply = {
+        ...newReply,
+        reactions: new Map(Object.entries(newReply.reactions || {}))
+      };
+      if (normalizedReply.threadId === currentTidRef.current) {
+        setThreadMsgs(prev => [...prev, normalizedReply]);
       }
-    });
+  });
     
     const unsubscribeThreadUpdated = socketService.on('thread-updated', updatedRoot => {
+      const rid = updatedRoot.id || updatedRoot._id?.toString();
+      updatedRoot.id = rid;
+
       if (updatedRoot.channelId === currentChannelRef.current) {
         setRoots(prevRoots => {
           return prevRoots.map(msg => 
-            msg.id === updatedRoot.id ? updatedRoot : msg
+            msg.id === rid ? updatedRoot : msg
           );
         });
       }

@@ -2,11 +2,31 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import { createServer} from 'http';
 import { Server } from 'socket.io';
+import connectDB from './db.js';
 
 import sessions from './sessions.js';
 import users from './users.js';
 import messages from './messages.js';
 import channels from './channels.js';
+
+connectDB();
+
+async function initializeDatabase() {
+  try {
+    // Check if admin user exists
+    const adminExists = await users.isRegistered('admin');
+    if (!adminExists) {
+      await users.register('admin');
+      console.log('Admin user created');
+    }
+    
+    console.log('Database initialized');
+  } catch (error) {
+    console.error('Error initializing database:', error);
+  }
+}
+
+initializeDatabase();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -25,9 +45,9 @@ const io = new Server(httpServer, {
 app.use(cookieParser());
 app.use(express.json());
 
-function ensureLogin(req, res, next) {
+async function ensureLogin(req, res, next) {
   const sid = req.cookies.sid;
-  const user = sid && sessions.getSessionUser(sid);
+  const user = sid && await sessions.getSessionUser(sid);
   if (!sid || !user) {
     res.clearCookie('sid', { path: '/' });
     return res.status(401).json({ error: 'auth-missing' });
@@ -37,13 +57,13 @@ function ensureLogin(req, res, next) {
 }
 
 // Socket.io middleware to authenticate socket connections
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   const sid = socket.handshake.auth.sid;
   if (!sid) {
     return next(new Error('No session ID provided'));
   }
   
-  const username = sessions.getSessionUser(sid);
+  const username = await sessions.getSessionUser(sid);
   if (!username) {
     return next(new Error('Invalid session ID'));
   }
@@ -54,7 +74,7 @@ io.use((socket, next) => {
 });
 
 // Socket.io connection event
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
   console.log(`User ${socket.username} connected`);
   
   // Join default room (can be used for global notifications)
@@ -64,31 +84,32 @@ io.on('connection', (socket) => {
   socket.join(`user:${socket.username}`);
   
   // Join channel rooms
-  channels.getChannels().forEach(channel => {
+  const channelList = await channels.getChannels();
+  channelList.forEach(channel => {
     socket.join(`channel:${channel.id}`);
-  });
+  });  
   
   // Notify everyone about new connection
-  io.emit('users-updated', sessions.getAllUsers());
+  const list = await sessions.getAllUsers();
+  io.emit('users-updated', list);
   
-  // Handle disconnection
   socket.on('disconnect', () => {
     console.log(`User ${socket.username} disconnected`);
-    io.emit('users-updated', sessions.getAllUsers());
+    sessions.getAllUsers().then(updated => {
+        io.emit('users-updated', updated);
+    });
   });
   
-  // Handle channel join
   socket.on('join-channel', (channelId) => {
     socket.join(`channel:${channelId}`);
   });
   
-  // Handle thread join
   socket.on('join-thread', (threadId) => {
     socket.join(`thread:${threadId}`);
   });
 });
 
-app.post('/api/v1/register', (req,res)=>{
+app.post('/api/v1/register', async (req,res)=>{
     const { username } = req.body;
 
     if(!username) {
@@ -96,7 +117,7 @@ app.post('/api/v1/register', (req,res)=>{
       return;
     }
 
-    if (!users.isValid(username)) {
+    if (!await users.isValid(username)) {
         res.status(400).json({ error: 'invalid-username' });
         return;
     }
@@ -106,7 +127,7 @@ app.post('/api/v1/register', (req,res)=>{
         return;
     }
   
-    const result = users.register(username);
+    const result = await users.register(username);
     if(!result.ok){
       const map = {
         'invalid-username' : { status:400, code:'invalid-username' },
@@ -118,7 +139,7 @@ app.post('/api/v1/register', (req,res)=>{
     res.json({ username });
 });
 
-app.post('/api/v1/session', (req, res) => {
+app.post('/api/v1/session', async (req, res) => {
   const { username } = req.body;
   
     if(!username) {
@@ -126,12 +147,12 @@ app.post('/api/v1/session', (req, res) => {
     return;
     }
   
-    if(!users.isValid(username)){
+    if(!await users.isValid(username)){
        res.status(400).json({ error:'invalid-username' });
        return;
     }
     
-    if(!users.isRegistered(username)){
+    if(!await users.isRegistered(username)){
        res.status(401).json({ error:'user-not-registered' });
        return;
      }
@@ -141,33 +162,33 @@ app.post('/api/v1/session', (req, res) => {
         return;
     }
   
-  const sid = sessions.addSession(username);
+  const sid = await sessions.addSession(username);
   res.cookie('sid', sid);
   res.json({ username });
 });
 
 app.use('/api/v1', ensureLogin);  // middleware to ensure login for all routes below, avoid duplicate
 
-app.get('/api/v1/session', (req, res) => {  
+app.get('/api/v1/session', async (req, res) => {  
   const role = (req.username === 'admin') ? 'admin' : 'user';
   res.json({ username: req.username, role });
 });
 
-app.delete('/api/v1/session', (req, res) => {
-  sessions.deleteSession(req.cookies.sid);
+app.delete('/api/v1/session', async (req, res) => {
+  await sessions.deleteSession(req.cookies.sid);
   res.clearCookie('sid');
   res.json({ wasLoggedIn: true });
 });
 
-app.get('/api/v1/users', (req, res) => {
-  const usernames = sessions.getAllUsers();
+app.get('/api/v1/users', async (req, res) => {
+  const usernames = await sessions.getAllUsers();
   res.json(usernames);
 });
 
 //emoji reactions feature
-app.post('/api/v1/messages/:id/reactions', (req,res)=>{
+app.post('/api/v1/messages/:id/reactions', async (req,res)=>{
   const { key } = req.body;
-  const updated = messages.addReaction(req.params.id, req.username, key);
+  const updated = await messages.addReaction(req.params.id, req.username, key);
   if(!updated){
     res.status(404).json({ error:'noSuchId' });
     return;
@@ -175,16 +196,26 @@ app.post('/api/v1/messages/:id/reactions', (req,res)=>{
 
   // Emit reaction update to relevant channels and threads
   if (updated.threadId) {
-    io.to(`thread:${updated.threadId}`).emit('reaction-updated', updated);
+    // Apply documentToObject before emitting
+    const formattedMessage = typeof updated.toObject === 'function' ? updated.toObject() : updated;
+    if (formattedMessage._id && !formattedMessage.id) {
+      formattedMessage.id = formattedMessage._id.toString();
+    }
+    io.to(`thread:${updated.threadId}`).emit('reaction-updated', formattedMessage);
   } else {
-    io.to(`channel:${updated.channelId || 'public'}`).emit('reaction-updated', updated);
+    // Apply documentToObject before emitting
+    const formattedMessage = typeof updated.toObject === 'function' ? updated.toObject() : updated;
+    if (formattedMessage._id && !formattedMessage.id) {
+      formattedMessage.id = formattedMessage._id.toString();
+    }
+    io.to(`channel:${updated.channelId || 'public'}`).emit('reaction-updated', formattedMessage);
   }
 
   res.json(updated);
 });
 
-app.delete('/api/v1/messages/:id/reactions/:key', (req,res)=>{
-  const updated = messages.removeReaction(req.params.id, req.username, req.params.key);
+app.delete('/api/v1/messages/:id/reactions/:key', async (req,res)=>{
+  const updated = await messages.removeReaction(req.params.id, req.username, req.params.key);
   if(!updated){
     res.status(404).json({ error:'noSuchId' });
     return;
@@ -192,47 +223,73 @@ app.delete('/api/v1/messages/:id/reactions/:key', (req,res)=>{
 
   // Emit reaction update to relevant channels and threads
   if (updated.threadId) {
-    io.to(`thread:${updated.threadId}`).emit('reaction-updated', updated);
+    // Apply documentToObject before emitting
+    const formattedMessage = typeof updated.toObject === 'function' ? updated.toObject() : updated;
+    if (formattedMessage._id && !formattedMessage.id) {
+      formattedMessage.id = formattedMessage._id.toString();
+    }
+    io.to(`thread:${updated.threadId}`).emit('reaction-updated', formattedMessage);
   } else {
-    io.to(`channel:${updated.channelId || 'public'}`).emit('reaction-updated', updated);
+    // Apply documentToObject before emitting
+    const formattedMessage = typeof updated.toObject === 'function' ? updated.toObject() : updated;
+    if (formattedMessage._id && !formattedMessage.id) {
+      formattedMessage.id = formattedMessage._id.toString();
+    }
+    io.to(`channel:${updated.channelId || 'public'}`).emit('reaction-updated', formattedMessage);
   }
   res.json(updated);
 });
 
 //thread endpoints
-app.get('/api/v1/messages', (req, res) => {
+app.get('/api/v1/messages', async (req, res) => {
   const channelId = req.query.channelId || 'public';
   
-  const roots = messages.listRoots(channelId).map(root => {
-    const replyCount = messages.listThread(root.id).length - 1;
-    return { ...root, replyCount };
-  });
+  let roots = await messages.listRoots(channelId);
+
+  // Use Promise.all for parallel processing
+  roots = await Promise.all(roots.map(async root => {
+    const thread = await messages.listThread(root._id);
+    const rootObj = typeof root.toObject === 'function' ? root.toObject() : root;
+    rootObj.id = rootObj._id.toString(); // Add id property as string
+    return { ...rootObj, replyCount: thread.length - 1 };
+  }));  
   
   res.json(roots);
 }); 
 
-app.get('/api/v1/threads/:tid', (req, res) => {
-    const tid = req.params.tid;
-    if (isNaN(tid)) {
-      return res.status(400).json({ error: 'invalid-tid' });
-    }
-    
-    const data = messages.listThread(tid);
-    if (!data.length) {
-      return res.status(404).json({ error: 'noSuchThread' });
-    }
-    const [root, ...replies] = data;
-    res.json({ root, replies });
+app.get('/api/v1/threads/:tid', async (req, res) => {
+  const tid = req.params.tid;
+  if (!tid.match(/^[0-9a-fA-F]{24}$/)) {
+    return res.status(400).json({ error: 'invalid-tid' });
+  }
+  
+  const data = await messages.listThread(tid);
+  if (!data.length) {
+    return res.status(404).json({ error: 'noSuchThread' });
+  }
+  const [root, ...replies] = data;
+  
+  // Check if toObject exists before calling it
+  const rootObj = typeof root.toObject === 'function' ? root.toObject() : root;
+  rootObj.id = rootObj._id.toString();
+  
+  const repliesObj = replies.map(reply => {
+    const replyObj = typeof reply.toObject === 'function' ? reply.toObject() : reply;
+    replyObj.id = replyObj._id.toString();
+    return replyObj;
+  });
+  
+  res.json({ root: rootObj, replies: repliesObj });
 });
 
-app.post('/api/v1/messages', (req, res) => {
+app.post('/api/v1/messages', async (req, res) => {
   const { text, channelId = 'public' } = req.body;
   
   if (!text || !text.trim()) {
     return res.status(400).json({ error: 'required-message' });
   }
   
-  const msg = messages.addMessage(req.username, text, { channelId }); 
+  const msg = await messages.addMessage(req.username, text, { channelId }); 
 
   // Emit new message to the channel
   io.to(`channel:${channelId}`).emit('message-created', msg);
@@ -240,25 +297,25 @@ app.post('/api/v1/messages', (req, res) => {
   res.json(msg);
 }); 
 
-app.post('/api/v1/threads/:tid', (req, res) => {
+app.post('/api/v1/threads/:tid', async (req, res) => {
     const { text, parentId = null } = req.body;
     if (!text || !text.trim()) {
       return res.status(400).json({ error: 'required-message' });
     }
 
     const tid = req.params.tid;
-    if (isNaN(tid)) {
+    if (!tid.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ error: 'invalid-tid' });
     }
 
-    const thread = messages.listThread(tid);
+    const thread = await messages.listThread(tid);
     if (!thread.length) {
       return res.status(404).json({ error: 'noSuchThread' });
     }
 
     const channelId = thread[0].channelId || 'public';
 
-    const msg = messages.addMessage(req.username, text, { 
+    const msg = await messages.addMessage(req.username, text, { 
       threadId: tid, 
       parentId: parentId || tid,
       channelId
@@ -268,11 +325,12 @@ app.post('/api/v1/threads/:tid', (req, res) => {
     io.to(`thread:${tid}`).emit('reply-created', msg);
     
     // Also update the channel with updated replyCount
-    const rootMsg = messages.getMessage(tid);
+    const rootMsg = await messages.getMessage(tid);
     if (rootMsg) {
+      const threadList = await messages.listThread(tid);
       const updatedRoot = {
         ...rootMsg,
-        replyCount: messages.listThread(tid).length - 1
+        replyCount: threadList.length - 1
       };
       io.to(`channel:${channelId}`).emit('thread-updated', updatedRoot);
     }
@@ -281,11 +339,11 @@ app.post('/api/v1/threads/:tid', (req, res) => {
 }); 
 
 //channel endpoints
-app.get('/api/v1/channels', (req, res) => {
-  res.json(channels.getChannels());
+app.get('/api/v1/channels', async (req, res) => {
+  res.json(await channels.getChannels());
 });
 
-app.post('/api/v1/channels', (req, res) => {
+app.post('/api/v1/channels', async (req, res) => {
   const { name } = req.body;
   
   if (!name) {
@@ -296,7 +354,7 @@ app.post('/api/v1/channels', (req, res) => {
     return res.status(400).json({ error: 'invalid-channel-name' });
   }
   
-  const result = channels.createChannel(name, req.username);
+  const result = await channels.createChannel(name, req.username);
   
   if (!result.ok) {
     if (result.error === 'auth-insufficient') {
@@ -319,28 +377,29 @@ app.post('/api/v1/channels', (req, res) => {
   res.json(result.channel);
 });
 
-app.get('/api/v1/channels/:channelId/messages', (req, res) => {
+app.get('/api/v1/channels/:channelId/messages', async (req, res) => {
   const { channelId } = req.params;
-  const channel = channels.getChannel(channelId);
+  const channel = await channels.getChannel(channelId);
   
   if (!channel) {
     return res.status(404).json({ error: 'no-such-channel' });
   }
   
-  const roots = messages.listRoots(channelId).map(root => {
-    const replyCount = messages.listThread(root.id).length - 1;
-    return { ...root, replyCount };
-  });
+  let roots = await messages.listRoots(channelId);
+  roots = await Promise.all(roots.map(async root => {
+    const thread = await messages.listThread(root._id);
+    return { ...root.toObject(), replyCount: thread.length - 1 };
+  }));
   
   res.json(roots);
 });
 
 //forwarding message endpoints
-app.post('/api/v1/messages/:id/forward', (req, res) => {
+app.post('/api/v1/messages/:id/forward', async (req, res) => {
   const { comment = '', channelId = 'public', threadId = null } = req.body;
   const messageId = req.params.id;
   
-  const forwardedMessage = messages.forwardMessage(req.username, messageId, comment, {
+  const forwardedMessage = await messages.forwardMessage(req.username, messageId, comment, {
     channelId, threadId  });
   
   if (!forwardedMessage) {
@@ -357,13 +416,13 @@ app.post('/api/v1/messages/:id/forward', (req, res) => {
 });
 
 //editing feature
-app.patch('/api/v1/messages/:id', (req, res) => {
+app.patch('/api/v1/messages/:id', async (req, res) => {
   const { text }  = req.body;
   if(!text || !text.trim()) {
     return res.status(400).json({ error: 'required-message' });
   }
 
-  const result = messages.updateMessage(req.params.id, req.username, text);
+  const result = await messages.updateMessage(req.params.id, req.username, text);
 
   if(!result) {
     return res.status(404).json({error:'no-such-message'});

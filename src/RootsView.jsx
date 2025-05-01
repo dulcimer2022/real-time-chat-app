@@ -11,10 +11,10 @@ export default function RootsView({ roots, username, onSelect, onToggle, hovered
   }
 
   return roots.map(root => (
-    <div key={root.id}
+    <div key={root._id}
          className={`message ${root.username===username ? 'message-own' : ''}`}
          onClick={() => editingId === null}
-         onMouseEnter={() => setHoveredId(root.id)}
+         onMouseEnter={() => setHoveredId(root._id)}
          onMouseLeave={() => setHoveredId(null)}>
 
       <div className="message-username">
@@ -32,7 +32,7 @@ export default function RootsView({ roots, username, onSelect, onToggle, hovered
         </div>
       )}
 
-      {editingId === root.id ? (
+      {editingId === root._id ? (
         <EditMessage 
           message={root}
           onSave={(id, text) => {
@@ -48,7 +48,7 @@ export default function RootsView({ roots, username, onSelect, onToggle, hovered
         </div>
       )}
 
-      { hoveredId === root.id &&
+      { hoveredId === root._id &&
         <EmojiPicker
           message={root}
           username={username}
@@ -60,7 +60,7 @@ export default function RootsView({ roots, username, onSelect, onToggle, hovered
         className="badge"
         onClick={(e) => {
           e.stopPropagation();
-          onSelect(root.id);
+          onSelect(root._id);
         }}
       >
         💬 {root.replyCount}
@@ -71,7 +71,7 @@ export default function RootsView({ roots, username, onSelect, onToggle, hovered
           className="message-action"
           onClick={(e) => {
             e.stopPropagation();
-            setEditingId(root.id);
+            setEditingId(root._id);
           }}
         >
           ✏️

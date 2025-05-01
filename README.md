@@ -1,5 +1,5 @@
 # Real-Time Chat Application
-A responsive, feature-rich chat application built with React, Express, and Node.js. This single-page application demonstrates modern front-end and back-end development techniques with a focus on component-based architecture and RESTful API integration.
+A responsive, feature-rich chat application built with the MERN stack (MongoDB, Express, React, Node.js) and Socket.IO. This single-page application demonstrates modern front-end and back-end development techniques with a focus on component-based architecture and RESTful API integration.
   
 Supports:
 
@@ -15,6 +15,17 @@ Supports:
    cd real-time-chat-app
 
    npm install
+```
+### Installing MongoDB
+#### On macOS:
+```bash
+# Using Homebrew
+brew tap mongodb/brew
+brew install mongodb-community
+brew services start mongodb-community
+```
+### build and start the application
+```bash
    npm run build
    npm start
 ```

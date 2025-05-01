@@ -2,8 +2,13 @@ import { EMOJI, DEFAULT_EMOJI_KEYS } from './constants';
 import './EmojiPicker.css';   
 
 export default function EmojiPicker({ message, username, onToggle }) {
-  const reacted = key =>
-    (message.reactions?.[key] || []).includes(username);
+  const reacted = key => {
+    if (message.reactions instanceof Map) {
+      return (message.reactions.get(key) || []).includes(username);
+    } else {
+      return (message.reactions?.[key] || []).includes(username);
+    }
+  };
 
   return (
     <div className="emoji-picker">
@@ -12,7 +17,7 @@ export default function EmojiPicker({ message, username, onToggle }) {
           key={key}
           onClick={(e) => {
             e.stopPropagation(); 
-            onToggle(message.id, key, reacted(key));
+            onToggle(message.id || message._id, key, reacted(key));
           }}
         >
           {EMOJI[key]}

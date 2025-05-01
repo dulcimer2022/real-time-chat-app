@@ -1,30 +1,28 @@
 import { randomUUID } from 'crypto';
+import Session from './models/Session.js';
 
-const sessions = {};
 
-function addSession(username) {
+async function addSession(username) {
   const sid = randomUUID();
-  sessions[sid] = {
-    username,
-  };
+  await Session.create({ sid, username });
   return sid;
 }
 
-function getSessionUser(sid) {
-  return sessions[sid]?.username;
+async function getSessionUser(sid) {
+  const session = await Session.findOne({ sid });
+  return session ? session.username : null
 }
 
-function deleteSession(sid) {
-  delete sessions[sid];
+async function deleteSession(sid) {
+  await Session.deleteOne({ sid });
 }
 
-function getAllUsers() {
+async function getAllUsers() {
+  const sessions = await Session.find({});
   const usernames = new Set();
   
-  Object.values(sessions).forEach(session => {
-    if(session && session.username) {
-      usernames.add(session.username);
-    }
+  sessions.forEach(session => {
+    usernames.add(session.username);
   });
   
   return Array.from(usernames);

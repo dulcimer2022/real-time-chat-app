@@ -25,10 +25,12 @@ export function initSocket(sid) {
 
   // Create new socket connection with session ID for authentication
   socket = io(SOCKET_SERVER_URL, {
-    auth: { sid }
+    auth: { sid },
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000
   });
 
-  // Setup default event listeners
   setupListeners();
 
   return socket;
@@ -38,7 +40,6 @@ export function initSocket(sid) {
 function setupListeners() {
   if (!socket) return;
 
-  // Handle connection events
   socket.on('connect', () => {
     console.log('Socket connected');
   });
@@ -59,13 +60,11 @@ function setupListeners() {
   });
 }
 
-// Join a channel room
 export function joinChannel(channelId) {
   if (!socket || !socket.connected) return;
   socket.emit('join-channel', channelId);
 }
 
-// Join a thread room
 export function joinThread(threadId) {
   if (!socket || !socket.connected) return;
   socket.emit('join-thread', threadId);

@@ -1,12 +1,10 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import ReactionBar from './ReactionBar';
 import EmojiPicker from './EmojiPicker';
 import EditMessage from './EditMessage';
 
 export default function ThreadView({ messages, username, onBack, onToggle, hoveredId, setHoveredId, onForward, onEdit  }) {
   const [editingId, setEditingId] = useState(null);
-  const navigate = useNavigate();
 
   if (!messages.length) { return null; }
 
@@ -21,9 +19,9 @@ export default function ThreadView({ messages, username, onBack, onToggle, hover
       }}>← Back to Channel</button>
 
       {messages.map(msg => (
-        <div key={msg.id}
+        <div key={msg._id}
              className={`message ${msg.username===username ? 'message-own' : ''}`}
-             onMouseEnter={() => setHoveredId(msg.id)}
+             onMouseEnter={() => setHoveredId(msg._id)}
              onMouseLeave={() => setHoveredId(null)}>
           <div className="message-username">
             {msg.username}
@@ -41,7 +39,7 @@ export default function ThreadView({ messages, username, onBack, onToggle, hover
             </div>
           )}
 
-          {editingId === msg.id ? (
+          {editingId === msg._id ? (
             <EditMessage 
               message={msg}
               onSave={(id, text) => {
@@ -62,7 +60,7 @@ export default function ThreadView({ messages, username, onBack, onToggle, hover
               className="message-action"
               onClick={(e) => {
                 e.stopPropagation();
-                setEditingId(msg.id);
+                setEditingId(msg._id);
               }}
             >
               ✏️
@@ -79,7 +77,7 @@ export default function ThreadView({ messages, username, onBack, onToggle, hover
             ↪️ 
           </button>
 
-          { hoveredId === msg.id &&
+          { hoveredId === msg._id &&
             <EmojiPicker
               message={msg}
               username={username}

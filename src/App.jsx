@@ -18,7 +18,6 @@ function App() {
 
   useEffect(() => {
     checkForSession();
-    // Cleanup socket connection on component unmount
     return () => {
       socketService.disconnect();
     };
@@ -59,21 +58,21 @@ function App() {
     setLoginStatus(LOGIN_STATUS.IS_LOGGED_IN);
     setError('');
 
-    //cookie extraction
-    setTimeout(() => {
-      // Wait a bit for the cookie to be set before initializing socket
-      const sidCookie = document.cookie
-        .split('; ')
-        .find(cookie => cookie.startsWith('sid='));
-      
-      if (sidCookie) {
-        const sid = sidCookie.split('=')[1];
-        socketService.initSocket(sid);
-      }
-    }, 100);
-
     navigate('/chat');
-  };
+
+// Initialize the Socket.IO connection once
+    const sidCookie = document.cookie
+      .split('; ')
+      .find(cookie => cookie.startsWith('sid='));
+    if (sidCookie) {
+      const sid = sidCookie.split('=')[1];
+      const socket = socketService.initSocket(sid);
+      socket.on('connect_error', (err) => {
+        console.error('Socket connection error:', err);
+        setError('socket-connection-error');
+      });
+    }
+   };
 
   const handleLogout = () => {
     // Disconnect socket when logging out

@@ -61,7 +61,7 @@ export const CLIENT = {
 export const EMOJI = {
       smile: '😅',   // U+1F605
       devil: '😈',   // U+1F608
-      cool:  '🤣',   // U+1F60E
+      cool:  '😎',   // U+1F60E
       angry: '😡',   // U+1F621
       tired: '😫',   // U+1F62B
       rofl:  '🤣',   // U+1F923

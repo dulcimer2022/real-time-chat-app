@@ -1,146 +1,165 @@
-//const messages = [];
+import mongoose from 'mongoose';
+import Message from './models/Message.js';
+import { EMOJI } from './emoji.js'; // Server-side emoji
 
-// Simulated database of messages
-const messagesDb = [];
-let nextId = 1;
-
-function addReaction(id, username, key){            
-  const numericId = Number(id);
-  const message = messagesDb.find(msg => msg.id === numericId);
-
-  if(!message){ return null; }
-  // Initialize the reaction array if needed
-  if (!message.reactions[key]) {
-    message.reactions[key] = [];
+// Utility function to convert MongoDB documents to client-friendly objects
+function documentToObject(doc) {
+  if (!doc) return null;
+  const obj = doc.toObject ? doc.toObject() : { ...doc };
+  if (obj._id && !obj.id) {
+    obj.id = obj._id.toString();
   }
-
-  // Add username to the reaction if not already there
-  if (!message.reactions[key].includes(username)) {
-    message.reactions[key].push(username);
-  }
-  
-  return message;
+  return obj;
 }
 
-function removeReaction(id, username, key){         
-  const numericId = Number(id);
-  const message = messagesDb.find(msg => msg.id === numericId);
-
-  if (!message) return null;
-
-  // If the reaction exists, remove the username
-  if (message.reactions[key]) {
-    message.reactions[key] = message.reactions[key].filter(u => u !== username);
-    
-    // Remove the reaction key entirely if no users are left
-    if (message.reactions[key].length === 0) {
-      delete message.reactions[key];
+async function addReaction(id, username, key) {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    if (!username || !key) return null;
+    if (!Object.keys(EMOJI).includes(key)) {
+      console.error(`Invalid emoji key: ${key}`);
+      return null;
     }
+    const message = await Message.findByIdAndUpdate(
+      id,
+      {
+        $addToSet: { [`reactions.${key}`]: username },
+      },
+      { new: true }
+    );
+    if (!message) return null;
+    return documentToObject(message);
+  } catch (err) {
+    console.error('Error adding reaction:', err);
+    return null;
   }
-  
-  return message;
 }
 
-function addMessage(username, text, options = {}) {
-  const { threadId = null, parentId = null, channelId = 'public', originalMessage = null } = options;
-  
-  const isForwarded = !!originalMessage;
+async function removeReaction(id, username, key) {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    if (!username || !key) return null;
+    if (!Object.keys(EMOJI).includes(key)) {
+      console.error(`Invalid emoji key: ${key}`);
+      return null;
+    }
+    let message = await Message.findByIdAndUpdate(
+      id,
+      {
+        $pull: { [`reactions.${key}`]: username },
+      },
+      { new: true }
+    );
+    if (!message) return null;
+    if (message.reactions[key]?.length === 0) {
+      message = await Message.findByIdAndUpdate(
+        id,
+        {
+          $unset: { [`reactions.${key}`]: 1 },
+        },
+        { new: true }
+      );
+    }
+    return documentToObject(message);
+  } catch (err) {
+    console.error('Error removing reaction:', err);
+    return null;
+  }
+}
 
-  const message = {
-    id: nextId++,
+async function addMessage(username, text, options = {}) {
+  const { threadId = null, parentId = null, channelId = 'public', originalMessage = null } = options;
+  const isForwarded = !!originalMessage;
+  const message = await Message.create({
     username,
     text,
-    timestamp: Date.now(),
-    reactions: {},
     parentId,
-    threadId: threadId !== null ? Number(threadId) : null,
+    threadId,
     channelId,
     isForwarded,
     originalMessage,
-    edited: false,
-  };
-  
-  messagesDb.push(message);
-  return message;
+  });
+  return documentToObject(message);
 }
 
-// New method to get a specific message
-function getMessage(id) {
-  const messageId = Number(id);
-  return messagesDb.find(msg => msg.id === messageId);
+async function getMessage(id) {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    const message = await Message.findById(id);
+    return documentToObject(message);
+  } catch (err) {
+    console.error('Error finding message:', err);
+    return null;
+  }
 }
 
-function listRoots(channelId = 'public') {
-  return messagesDb
-    .filter(msg => !msg.threadId && msg.channelId === channelId)
-    .sort((a, b) => b.timestamp - a.timestamp);
+async function listRoots(channelId = 'public') {
+  try {
+    const roots = await Message.find({ channelId, threadId: null })
+      .sort({ timestamp: -1 });
+    return roots.map(root => documentToObject(root));
+  } catch (err) {
+    console.error('Error listing roots:', err);
+    return [];
+  }
 }
 
-function listThread(tid) {
-    // Convert to number to ensure type safety
-    const numericThreadId = Number(tid);
-    //const threadId = typeof tid === 'number' ? tid : +tid;
-    
-  // Find the root message first (message with id === threadId)
-  const root = messagesDb.find(msg => msg.id === numericThreadId);
-  if (!root) return [];
-  
-  // Then find all messages in the thread (with threadId === threadId)
-  const replies = messagesDb
-    .filter(msg => msg.threadId === numericThreadId && msg.id !== numericThreadId)
-    .sort((a, b) => a.timestamp - b.timestamp);
-  
-  return [root, ...replies];
+async function listThread(tid) {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(tid)) return [];
+    const root = await Message.findById(tid);
+    if (!root) return [];
+    const replies = await Message.find({ threadId: tid, _id: { $ne: tid } })
+      .sort({ timestamp: 1 });
+    return [root, ...replies].map(msg => documentToObject(msg));
+  } catch (err) {
+    console.error('Error listing thread:', err);
+    return [];
+  }
 }
 
-//forward feature
-function forwardMessage(username, originalMessageId, comment = '', options = {}) {
+async function forwardMessage(username, originalMessageId, comment = '', options = {}) {
   const { channelId = 'public', threadId = null } = options;
-  //const originalMessage = messages.find(m => m.id === +originalMessageId);
-  const numericId = Number(originalMessageId);
-  const originalMessage = messagesDb.find(msg => msg.id === numericId);
-
-  if (!originalMessage) {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(originalMessageId)) return null;
+    const originalMessage = await Message.findById(originalMessageId);
+    if (!originalMessage) return null;
+    const messageText = comment.trim() || " ";
+    const forwardedMessage = await addMessage(
+      username,
+      messageText,
+      {
+        threadId,
+        channelId,
+        isForwarded: true,
+        originalMessage: {
+          id: originalMessage._id.toString(),
+          username: originalMessage.username,
+          text: originalMessage.text
+        }
+      }
+    );
+    return forwardedMessage;
+  } catch (err) {
+    console.error('Error forwarding message:', err);
     return null;
   }
-  
-  //const channelId = options.channelId || originalMessage.channelId || 'public';
-  
-  // Create a new message with a reference to the original
-  const forwardedMessage = addMessage(
-    username,
-    comment,
-    {
-      threadId,
-      channelId,
-      originalMessage: {
-        id: originalMessage.id,
-        username: originalMessage.username,
-        text: originalMessage.text
-      }
-    }
-  );
-  
-  return forwardedMessage;
 }
 
-//editing feature
-function updateMessage(id, username, text) {
-  const numericId = Number(id);
-  const message = messagesDb.find(msg => msg.id === numericId);
-
-  if(!message){
+async function updateMessage(id, username, text) {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    const message = await Message.findById(id);
+    if (!message) return null;
+    if (message.username !== username) return { error: 'not-authorized' };
+    message.text = text;
+    message.edited = true;
+    await message.save();
+    return documentToObject(message);
+  } catch (err) {
+    console.error('Error updating message:', err);
     return null;
   }
-
-  if (message.username !== username){
-    return { error: 'not-authorized'};
-  }
-
-  message.text = text;
-  message.edited = true;
-
-  return message;
 }
 
 export default {
