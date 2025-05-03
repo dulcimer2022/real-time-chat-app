@@ -1,5 +1,5 @@
 import Channel from './models/Channel.js';
-// Initial channels
+
 async function initializeChannels() {
   const count = await Channel.countDocuments();
   
@@ -11,9 +11,6 @@ async function initializeChannels() {
   }
 }
 
-// Call this function when the server starts
-initializeChannels();
-  
 async function getChannels() {
   return await Channel.find({});
 }
@@ -47,5 +44,6 @@ async function createChannel(name, username) {
 export default {
   getChannels,
   getChannel,
-  createChannel
+  createChannel,
+  initializeChannels 
 };

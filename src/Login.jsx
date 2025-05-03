@@ -17,7 +17,12 @@ function Login({ onLogin, setError }) {
     setIsLoading(true);
     setLocalError('');
     setSuccess(''); 
-
+    
+    if (!username.trim()) {
+      setLocalError('required-username');
+      setIsLoading(false);
+      return;
+    }
     const promise =
       mode === 'login' ? login(username) : register(username);
 

@@ -9,7 +9,11 @@ import users from './users.js';
 import messages from './messages.js';
 import channels from './channels.js';
 
-connectDB();
+connectDB().then(() => {
+  initializeDatabase();
+  
+  httpServer.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+});
 
 async function initializeDatabase() {
   try {
