@@ -1,13 +1,26 @@
 import Channel from './models/Channel.js';
 
 async function initializeChannels() {
-  const count = await Channel.countDocuments();
-  
-  if (count === 0) {
-    await Channel.create([
-      { id: 'public', name: 'public' },
-      { id: 'introduction', name: 'introduction' }
-    ]);
+  try {
+    
+    const publicChannel = await Channel.findOne({ id: 'public' });
+    const introChannel = await Channel.findOne({ id: 'introduction' });
+    
+    let created = 0;
+    
+    if (!publicChannel) {
+      await Channel.create({ id: 'public', name: 'public' });
+      created++;
+    }
+    
+    if (!introChannel) {
+      await Channel.create({ id: 'introduction', name: 'introduction' });
+      created++;
+    }
+    
+    return true;
+  } catch (error) {
+    return false;
   }
 }
 

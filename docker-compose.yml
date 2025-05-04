@@ -1,0 +1,33 @@
+
+services:
+  app:
+    image: rooosy/chat-app:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chat-app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mongodb
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/chatapp
+    networks:
+      - chat-network
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    networks:
+      - chat-network
+
+networks:
+  chat-network:
+    driver: bridge
+
+volumes:
+  mongodb-data:

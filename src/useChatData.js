@@ -24,6 +24,18 @@ export function useChatData(defaultChannel, onError) {
   const rootsRef = useRef([]);
   const threadMsgsRef = useRef([]);
 
+  useEffect(() => {
+    refreshChannels()
+      .then(() => {
+        if (currentChannel) {
+          socketService.waitForConnection(() => {
+            socketService.joinChannel(currentChannel);
+          });
+        }
+      })
+      .catch(err => {});
+  }, []);
+
   // Update refs when state changes
   useEffect(() => {
     currentChannelRef.current = currentChannel;
@@ -131,6 +143,12 @@ export function useChatData(defaultChannel, onError) {
     const unsubscribeChannelCreated = socketService.on('channel-created', newChannel => {
       setChannels(prevChannels => [...prevChannels, newChannel]);
     });
+
+    const unsubscribeJoinedChannel = socketService.on('joined-channel', (data) => {
+      if (data.channelId === currentChannelRef.current) {
+        refreshRoots();
+      }
+    });
     
     const unsubscribeMessageCreated = socketService.on('message-created', newMessage => {
     // normalize incoming reactions into a Map 
@@ -236,6 +254,7 @@ export function useChatData(defaultChannel, onError) {
       unsubscribeReactionUpdated();
       unsubscribeReplyCreated();
       unsubscribeThreadUpdated();
+      unsubscribeJoinedChannel();
     };
   }, [currentChannel]);
 

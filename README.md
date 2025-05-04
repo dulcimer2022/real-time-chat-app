@@ -9,27 +9,27 @@ Supports:
 - **Forward & cite**: forward any message into current channel or thread, with optional comment. (any user)
 - **Edit messages**: any user can update their own messages.
 
-## Setting up
-```bash
-   git clone https://github.com/dulcimer2022/real-time-chat-app.git
-   cd real-time-chat-app
+## Getting Started
+### Option 1: Using Docker (Recommended)
+The easiest way to run this application is using Docker Compose, which handles all dependencies including MongoDB.
+#### Prerequisites
+- [Docker](https://docs.docker.com/get-docker/) must be installed on your system
 
-   npm install
-```
-### Installing MongoDB
-#### On macOS:
 ```bash
-# Using Homebrew
-brew tap mongodb/brew
-brew install mongodb-community
-brew services start mongodb-community
+# Clone the repository
+git clone https://github.com/yourusername/real-time-chat-app.git
+cd real-time-chat-app
+
+# Start the application using Docker Compose
+docker compose up -d
 ```
-### build and start the application
+This will automatically build the application image and start both the chat application and MongoDB containers. After installation, visit http://localhost:3000 in your browser.
+
+To stop the application:
 ```bash
-   npm run build
-   npm start
+docker compose down
 ```
-Visit http://localhost:3000 to see the running app
+You can also pull the pre-built image from Docker Hub:
 
 ## Features
 ### Main chat interface

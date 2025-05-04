@@ -109,11 +109,20 @@ export function replyThread(tid, text, parentId = null) {
   .then(handleJson);
 }
 
-//channels functions
 export function fetchChannels() {
   return fetch('/api/v1/channels')
-    .catch(onNetwork)
-    .then(handleJson);
+    .catch(err => {
+      return Promise.reject({ error: 'networkError' });
+    })
+    .then(res => {
+      if (!res.ok) {
+        return res.json().then(e => Promise.reject(e));
+      }
+      return res.json();
+    })
+    .then(data => {
+      return data;
+    });
 }
 
 export function createChannel(name, description = '') {

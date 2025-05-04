@@ -1,3 +1,9 @@
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err);
+  console.error(err.stack);
+  process.exit(1);
+});
+
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import { createServer} from 'http';
@@ -15,16 +21,16 @@ connectDB().then(() => {
 
 async function initializeDatabase() {
   try {
+    // Check if admin user exists
     const adminExists = await users.isRegistered('admin');
     if (!adminExists) {
       await users.register('admin');
+      console.log('Admin user created');
     }
     
-    await channels.initializeChannels();
-    
-    const channelList = await channels.getChannels();
-    
+    console.log('Database initialized');
   } catch (error) {
+    console.error('Error initializing database:', error);
   }
 }
 
@@ -101,10 +107,9 @@ io.on('connection', async (socket) => {
         io.emit('users-updated', updated);
     });
   });
-
+  
   socket.on('join-channel', (channelId) => {
     socket.join(`channel:${channelId}`);
-    socket.emit('joined-channel', { channelId });
   });
   
   socket.on('join-thread', (threadId) => {
@@ -341,13 +346,9 @@ app.post('/api/v1/threads/:tid', async (req, res) => {
     res.json(msg);
 }); 
 
+//channel endpoints
 app.get('/api/v1/channels', async (req, res) => {
-  try {
-    const channelList = await channels.getChannels();
-    res.json(channelList);
-  } catch (error) {
-    res.status(500).json({ error: 'server-error' });
-  }
+  res.json(await channels.getChannels());
 });
 
 app.post('/api/v1/channels', async (req, res) => {
@@ -448,6 +449,11 @@ app.patch('/api/v1/messages/:id', async (req, res) => {
 
   res.json(result);
 })
+
+app.use((err, req, res, next) => {
+  console.error('Express error:', err);
+  res.status(500).send('Internal Server Error');
+});
 
 app.use(express.static('./dist'));
 

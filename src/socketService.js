@@ -1,8 +1,6 @@
 import { io } from 'socket.io-client';
 
-const SOCKET_SERVER_URL = import.meta.env.DEV
-  ? 'http://localhost:3000'
-  : window.location.origin;
+const SOCKET_SERVER_URL = window.location.origin;
 
 let socket = null;
 
@@ -15,6 +13,7 @@ const listeners = {
   'reaction-updated': [],
   'message-updated': [],
   'channel-created': [],
+  'joined-channel': [], 
 };
 
 // Initialize socket connection
@@ -23,12 +22,16 @@ export function initSocket(sid) {
     socket.disconnect();
   }
 
+  console.log(`Initializing socket connection to ${SOCKET_SERVER_URL} with SID: ${sid}`);
+
   // Create new socket connection with session ID for authentication
   socket = io(SOCKET_SERVER_URL, {
     auth: { sid },
     reconnection: true,
-    reconnectionAttempts: 5,
-    reconnectionDelay: 1000
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000,
+    timeout: 10000,
+    transports: ['websocket', 'polling'] // Try WebSocket first, fall back to polling
   });
 
   setupListeners();
@@ -36,21 +39,14 @@ export function initSocket(sid) {
   return socket;
 }
 
-// Setup listeners for socket events
 function setupListeners() {
   if (!socket) return;
 
-  socket.on('connect', () => {
-    console.log('Socket connected');
-  });
+  socket.on('connect', () => {});
 
-  socket.on('connect_error', (error) => {
-    console.error('Socket connection error:', error.message);
-  });
+  socket.on('connect_error', (error) => {});
 
-  socket.on('disconnect', (reason) => {
-    console.log('Socket disconnected:', reason);
-  });
+  socket.on('disconnect', (reason) => {});
 
   // Handle custom events
   Object.keys(listeners).forEach(event => {
@@ -61,13 +57,44 @@ function setupListeners() {
 }
 
 export function joinChannel(channelId) {
-  if (!socket || !socket.connected) return;
+  if (!socket) {
+    return;
+  }
+  
+  if (!socket.connected) {
+    waitForConnection(() => {
+      socket.emit('join-channel', channelId);
+    });
+    return;
+  }
   socket.emit('join-channel', channelId);
 }
 
 export function joinThread(threadId) {
-  if (!socket || !socket.connected) return;
+  if (!socket || !socket.connected) {
+    return;
+  }
   socket.emit('join-thread', threadId);
+}
+
+export function waitForConnection(callback, interval = 200, maxAttempts = 10) {
+  let attempts = 0;
+  
+  const checkConnection = () => {
+    if (socket && socket.connected) {
+      callback();
+      return;
+    }
+    
+    attempts++;
+    if (attempts >= maxAttempts) {
+      return;
+    }
+    
+    setTimeout(checkConnection, interval);
+  };
+  
+  checkConnection();
 }
 
 // Register a callback for a specific event
@@ -96,5 +123,6 @@ export default {
   joinChannel,
   joinThread,
   on,
-  disconnect
+  disconnect,
+  waitForConnection
 };

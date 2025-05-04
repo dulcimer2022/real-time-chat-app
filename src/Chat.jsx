@@ -158,7 +158,11 @@ export default function Chat({ username, onLogout, setError }) {
       if (channelId && channelId !== currentChannel) {
         setCurrentChannel(channelId);
         setCurrentTid(null);
+       const timer = setTimeout(() => {
         socketService.joinChannel(channelId);
+      }, 500); // Small delay to ensure socket is ready
+      
+      return () => clearTimeout(timer);
       }
     }, [channelId]);
 
