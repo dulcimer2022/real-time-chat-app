@@ -29,7 +29,6 @@ To stop the application:
 ```bash
 docker compose down
 ```
-You can also pull the pre-built image from Docker Hub:
 
 ## Features
 ### Main chat interface
